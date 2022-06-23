@@ -158,33 +158,110 @@ static void _event_handler(telnet_t * telnet, telnet_event_t * ev,
     switch(ev->type)
     {
         /* data received */
+        /* MOD: I have added this event to record the buffer they are sending us so we can process the cli responses */
         case TELNET_EV_DATA_PRMPT:
         {
-            /* TODO: deubg */
-
-            // printf("\r\n<");
-            // for(int i = 0; i < ev->data.size; i++)
-            // {
-            //     printf("%02X", ev->data.buffer[i]);
-            // }
-            // printf(">");
             uint8_t match = 1;
             // char *  tempBuffer = malloc(ev->data.size + 1);
             memset(termBuffer, 0, sizeof(termBuffer));
             memcpy(termBuffer, ev->data.buffer, ev->data.size);
 
+            size_t start = 0;
+            while(start < sizeof(termBuffer))
+            {
+                // if there are mac addresses in the string
+                value = regexec(&mac_regex, termBuffer + start, nmatch, pmatch, 0);
+
+                if(0 == value)
+                {
+                    char address[64] = {0};
+                    char port[64]    = {0};
+                    // mac address is captured in index 1, port number is index 6
+                    memcpy(address, &termBuffer[pmatch[1].rm_so], pmatch[1].rm_eo - pmatch[1].rm_so);
+                    memcpy(port, &termBuffer[pmatch[6].rm_so], pmatch[6].rm_eo - pmatch[6].rm_so);
+
+                    // store mac address in our mac table
+                    int port_num = atoi(port);
+                    if(0 != strcmp(address, mac_table[port_num]))
+                    {
+                        printf("\r\nNEW MAC=\"%s\", port=%d", address, port_num);
+                        memcpy(mac_table[port_num], address, sizeof(mac_table[port_num]));
+
+                        // since we process this data byte by byte, a 2 digit port originally comes in as a single digit (10->1),
+                        //  so we loop back through to make sure that there is a 1 to 1 port to address mapping
+                        if(port_num > 9)
+                        {
+                            for(int mac = 0; mac < 13; mac++)
+                            {
+                                if(mac != port_num && 0 == strcmp(mac_table[mac], mac_table[port_num]))
+                                {
+                                    memset(mac_table[mac], 0, sizeof(mac_table[mac]));
+                                    printf("\r\nMOVED MAC=\"%s\", port=%d->%d", address, mac, port_num);
+                                }
+                            }
+                        }
+                    }
+
+                    start += pmatch[0].rm_eo;
+                    // printf("\r\nupdated start=%d", start);
+                }
+                else
+                {
+                    start = sizeof(termBuffer);
+                    // printf("\r\nEND=%d", start);
+                    break;
+                }
+            }
+            // printf("\r\nend processing termBuffer");
+
+            for(int c = 0; c < prmpt[cmd_num].size; c++)
+            {
+                if(prmpt[cmd_num].buffer[c] != ev->data.buffer[c])
+                {
+                    match = 0;
+                    break;
+                }
+            }
+
+            if(1 == match && 0 == prmpt_flag)
+            {
+                prmpt_flag = 1;
+            }
+        }
+        break;
+        case TELNET_EV_DATA:
+        {
+            // printf("\r\nTELNET_EV_DATA");
+            /* TODO: ideally, we can move the processing of the buffer we are recording above to here, 
+                    but for some reason, it isn't playing nicely, my guess is that it is getting erased */
+
             // size_t start = 0;
-            // while(start < sizeof(termBuffer))
+            // while(start < strlen(termBuffer))
             // {
-            //     // printf("\r\nstart=%d", start);
-            //     value = regexec(&mac_regex, termBuffer + start, nmatch, pmatch, 0);
+            //     printf("\r\nstart=%d", start);
+            //     value = regexec(&mac_regex, &termBuffer[start], nmatch, pmatch, 0);
+            //     if(strlen(&termBuffer[start]) >= 40)
+            //     {
+            //         // printf("\r\n<");
+            //         // for(int i = 0; i < 40; i++)
+            //         // {
+            //         //     printf("%02X|%c ", termBuffer[start + i], termBuffer[start + i]);
+            //         // }
+            //         // printf(">");
+            //         printf("\r\n<");
+            //         for(int i = 0; i < 40; i++)
+            //         {
+            //             printf("%c", termBuffer[start + i], termBuffer[start + i]);
+            //         }
+            //         printf(">");
+            //     }
 
             //     if(0 == value)
             //     {
-            //         // for(int m = 0; m < nmatch; m++)
-            //         // {
-            //         //     printf("\r\npmatch[%d]=\"%.*s\"", m, pmatch[m].rm_eo - pmatch[m].rm_so, &termBuffer[pmatch[m].rm_so]);
-            //         // }
+            //         for(int m = 0; m < nmatch; m++)
+            //         {
+            //             printf("\r\npmatch[%d]=\"%.*s\"", m, pmatch[m].rm_eo - pmatch[m].rm_so, &termBuffer[pmatch[m].rm_so]);
+            //         }
             //         char address[128] = {0};
             //         char port[128]    = {0};
             //         memcpy(address, &termBuffer[pmatch[1].rm_so], pmatch[1].rm_eo - pmatch[1].rm_so);
@@ -206,94 +283,16 @@ static void _event_handler(telnet_t * telnet, telnet_event_t * ev,
             //             }
             //         }
 
-            //         start += pmatch[0].rm_eo;
-            //         // printf("\r\nupdated start=%d", start);
+            //         start += pmatch[0].rm_eo + 2;
+            //         printf("\r\nupdated start=%d", start);
             //     }
             //     else
             //     {
-            //         start = sizeof(termBuffer);
-            //         // printf("\r\nEND=%d", start);
+            //         start = strlen(termBuffer);
+            //         printf("\r\nEND=%d\r\n", start);
             //         break;
             //     }
             // }
-            // printf("\r\nend processing termBuffer");
-
-            for(int c = 0; c < prmpt[cmd_num].size; c++)
-            {
-                if(prmpt[cmd_num].buffer[c] != ev->data.buffer[c])
-                {
-                    match = 0;
-                    break;
-                }
-            }
-
-            if(1 == match && 0 == prmpt_flag)
-            {
-                prmpt_flag = 1;
-            }
-        }
-        break;
-        case TELNET_EV_DATA:
-        {
-            // printf("\r\nTELNET_EV_DATA");
-            size_t start = 0;
-            while(start < strlen(termBuffer))
-            {
-                printf("\r\nstart=%d", start);
-                value = regexec(&mac_regex, &termBuffer[start], nmatch, pmatch, 0);
-                if(strlen(&termBuffer[start]) >= 40)
-                {
-                    // printf("\r\n<");
-                    // for(int i = 0; i < 40; i++)
-                    // {
-                    //     printf("%02X|%c ", termBuffer[start + i], termBuffer[start + i]);
-                    // }
-                    // printf(">");
-                    printf("\r\n<");
-                    for(int i = 0; i < 40; i++)
-                    {
-                        printf("%c", termBuffer[start + i], termBuffer[start + i]);
-                    }
-                    printf(">");
-                }
-
-                if(0 == value)
-                {
-                    for(int m = 0; m < nmatch; m++)
-                    {
-                        printf("\r\npmatch[%d]=\"%.*s\"", m, pmatch[m].rm_eo - pmatch[m].rm_so, &termBuffer[pmatch[m].rm_so]);
-                    }
-                    char address[128] = {0};
-                    char port[128]    = {0};
-                    memcpy(address, &termBuffer[pmatch[1].rm_so], pmatch[1].rm_eo - pmatch[1].rm_so);
-                    memcpy(port, &termBuffer[pmatch[6].rm_so], pmatch[6].rm_eo - pmatch[6].rm_so);
-
-                    int port_num = atoi(port);
-                    if(0 != strcmp(address, mac_table[port_num]))
-                    {
-                        printf("\r\nNEW MAC=\"%s\", port=%d", address, port_num);
-                        memcpy(mac_table[port_num], address, sizeof(mac_table[port_num]));
-
-                        for(int mac = 0; mac < 13; mac++)
-                        {
-                            if(mac != port_num && 0 == strcmp(mac_table[mac], mac_table[port_num]))
-                            {
-                                memset(mac_table[mac], 0, sizeof(mac_table[mac]));
-                                printf("\r\nMOVED MAC=\"%s\", port=%d->%d", address, mac, port_num);
-                            }
-                        }
-                    }
-
-                    start += pmatch[0].rm_eo + 2;
-                    printf("\r\nupdated start=%d", start);
-                }
-                else
-                {
-                    start = strlen(termBuffer);
-                    printf("\r\nEND=%d\r\n", start);
-                    break;
-                }
-            }
 
             if(ev->data.size && fwrite(ev->data.buffer, 1, ev->data.size, stdout) != ev->data.size)
             {
@@ -437,8 +436,7 @@ int main(int argc, char ** argv)
     pfd[1].events = POLLIN;
     int reti;
 
-    // reti = regcomp(&mac_regex, "(([0-9A-F]{2}:){5}([0-9A-F]{2})) +([A-Za-z]+) +([0-9]) +([0-9]+)$", REG_EXTENDED);
-    reti = regcomp(&mac_regex, "(([0-9A-F]{2}:){5}([0-9A-F]{2})) +([A-Za-z]+) +([0-9]) +([0-9]+)", REG_EXTENDED | REG_NEWLINE);
+    reti = regcomp(&mac_regex, "(([0-9A-F]{2}:){5}([0-9A-F]{2})) +([A-Za-z]+) +([0-9]) +([0-9]+)$", REG_EXTENDED);
     if(reti)
     {
         fprintf(stderr, "Could not compile regex\n");
