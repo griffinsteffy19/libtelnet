@@ -47,12 +47,16 @@ static const telnet_telopt_t telopts[] = {
     {TELNET_TELOPT_MSSP, TELNET_WONT, TELNET_DO},
     {-1, 0, 0}};
 
+/* MOD: added everything below, until the first function implementation */
+
+// command struct, could just be an array of strings now, but right now the size variable is used
 typedef struct trendnet_commands
 {
     char * buffer; /*!< command to be sent */
     int    size;   /*!< =buffer size */
 } trendnet_commands;
 
+// commands to be sent
 static const trendnet_commands cmds[] = {
     {"", 0},
     {"admin\n", 6},
@@ -68,6 +72,7 @@ static const trendnet_commands cmds[] = {
     {"exit\n", 5},
     {"\0", -1}};
 
+// prompts that trigger corresponding commands
 static const trendnet_commands prmpt[] = {
     {"\r\r\n", 3},
     {"TI-PG102i login: ", 17},
@@ -83,8 +88,10 @@ static const trendnet_commands prmpt[] = {
     {"TI-PG102i#", 10},
     {"\0", -1}};
 
+// our mac table
 const char mac_table[12 + 1][128];
 
+// helper variables to achieve a filled out mac table
 char       termBuffer[1024] = {0};
 regex_t    mac_regex;
 size_t     nmatch = 7;
@@ -298,10 +305,6 @@ static void _event_handler(telnet_t * telnet, telnet_event_t * ev,
             {
                 fprintf(stderr, "ERROR: Could not write complete buffer to stdout");
             }
-            if(0 == value)
-            {
-                printf("\r\n>%s", pmatch[0]);
-            }
             fflush(stdout);
         }
 
@@ -434,8 +437,9 @@ int main(int argc, char ** argv)
     pfd[0].events = POLLIN;
     pfd[1].fd     = sock;
     pfd[1].events = POLLIN;
-    int reti;
 
+    /* MOD: setup the regex to find our mac addresses */
+    int reti;
     reti = regcomp(&mac_regex, "(([0-9A-F]{2}:){5}([0-9A-F]{2})) +([A-Za-z]+) +([0-9]) +([0-9]+)$", REG_EXTENDED);
     if(reti)
     {
@@ -481,22 +485,20 @@ int main(int argc, char ** argv)
                 exit(1);
             }
         }
-
+        /* MOD: if we got the prompt we were expecting, then send the corresponding command */
         if(1 == prmpt_flag)
         {
             /* read from cmds */
             if(0 <= cmds[cmd_num].size)
             {
                 _input(cmds[cmd_num].buffer, cmds[cmd_num].size);
-                /* TODO: debug */
-
-                // printf("\r\n%s", cmds[cmd_num].buffer);
                 cmd_num++;
                 prmpt_flag = 0;
             }
         }
     }
 
+    /* MOD: print out our mac table */
     for(int mac = 0; mac < 13; mac++)
     {
         printf("\r\nMAC=\"%s\", port=%d", mac_table[mac], mac);
