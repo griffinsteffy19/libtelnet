@@ -1094,6 +1094,7 @@ static void _process(telnet_t * telnet, const char * buffer, size_t size)
                     }
                     telnet->state = TELNET_STATE_EOL;
                 }
+                /* MOD: this is the event I added */
                 else
                 {
                     if(i != start)

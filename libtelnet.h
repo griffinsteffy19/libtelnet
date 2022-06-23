@@ -221,8 +221,7 @@ enum telnet_event_type_t
     TELNET_EV_MSSP,           /*!< MSSP command has been received */
     TELNET_EV_WARNING,        /*!< recoverable error has occured */
     TELNET_EV_ERROR,          /*!< non-recoverable error has occured */
-    /* MOD: is this needed? */
-
+    /* MOD: add an event */
     TELNET_EV_DATA_PRMPT /*!< custom event */
 };
 typedef enum telnet_event_type_t telnet_event_type_t; /*!< Telnet event type. */
